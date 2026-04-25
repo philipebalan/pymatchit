@@ -1,0 +1,45 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "pymatchit"
+version = "0.1.0"
+description = "Teaching-oriented scaffolding for causal matching workflows in Python."
+readme = "README.md"
+requires-python = ">=3.11"
+license = { text = "MIT" }
+authors = [
+  { name = "pymatchit contributors" },
+]
+dependencies = [
+  "numpy",
+  "pandas",
+  "scipy",
+  "scikit-learn",
+  "patsy",
+  "statsmodels",
+  "matplotlib",
+]
+
+[project.optional-dependencies]
+full = [
+  "ortools",
+]
+dev = [
+  "ortools",
+  "pytest",
+  "ruff",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]
+
+[tool.ruff]
+line-length = 88
+target-version = "py311"
+src = ["src", "tests"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "UP"]
