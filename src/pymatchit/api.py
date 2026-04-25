@@ -371,8 +371,13 @@ def _resolve_exact_columns(
     exact: bool | str | list[str] | tuple[str, ...] | None,
     parsed: ParsedFormula,
 ) -> list[str]:
-    if exact is None or exact is True:
+    if exact is None:
         return parsed.covariate_names
+    if exact is True:
+        raise ValueError(
+            "exact=True is ambiguous with formula transformations; "
+            "pass exact=[...] explicitly."
+        )
     if exact is False:
         raise ValueError("method='exact' requires exact=True or a list of columns.")
     if isinstance(exact, str):

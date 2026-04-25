@@ -38,12 +38,14 @@ def full_match(
     if len(treated_index) <= len(control_index):
         anchor_index = treated_index
         assigned_index = control_index
-        costs = distance_matrix
+        # _solve_assignment_flow expects rows=assigned units, columns=anchors.
+        costs = distance_matrix.T
         anchor_is_treated = True
     else:
         anchor_index = control_index
         assigned_index = treated_index
-        costs = distance_matrix.T
+        # distance_matrix is already rows=treated assigned to control anchors.
+        costs = distance_matrix
         anchor_is_treated = False
 
     assignments = _solve_assignment_flow(

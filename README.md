@@ -87,7 +87,7 @@ optimal_fit = pymatchit.matchit(
     caliper=0.25,
 )
 
-# Experimental OR-Tools full matching prototype
+# Experimental full matching prototype, not optmatch-equivalent
 full_fit = pymatchit.matchit(
     "treat ~ age + income + educ",
     data,
@@ -125,7 +125,8 @@ avoids using outcomes to tune the design.
 - Greedy nearest-neighbor 1:1 matching for binary treatment and ATT.
 - Optimal 1:1 pair matching with SciPy assignment.
 - Propensity score subclassification with ATT and ATE-style weights.
-- Experimental OR-Tools full matching prototype for binary treatment.
+- Experimental OR-Tools full matching prototype for binary treatment. This is
+  not optmatch-equivalent and should not be treated as production full matching.
 - Balance diagnostics for matched and weighted designs.
 
 ## Currently Unsupported
@@ -140,7 +141,7 @@ unsupported features include:
 - Survey weights.
 - Sampling weights in propensity score estimation.
 - Variable-ratio nearest-neighbor matching.
-- Optimal full matching and network-flow solvers from optmatch.
+- Optmatch-equivalent optimal full matching and network-flow behavior.
 - Exact replication of R object classes, print methods, and plotting APIs.
 - Built-in treatment-effect estimation or outcome modeling.
 

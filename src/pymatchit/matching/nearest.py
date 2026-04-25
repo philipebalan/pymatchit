@@ -64,7 +64,9 @@ def nearest_neighbor_match(
         weights.loc[treated_label] = 1.0
         weights.loc[control_label] += 1.0
         subclass.loc[treated_label] = subclass_id
-        if pd.isna(subclass.loc[control_label]):
+        # With replacement, reused controls belong to multiple matched sets;
+        # the matches table is the source of truth for those memberships.
+        if not replace and pd.isna(subclass.loc[control_label]):
             subclass.loc[control_label] = subclass_id
 
         if not replace:

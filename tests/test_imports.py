@@ -152,7 +152,7 @@ def test_exact_matching_summary_counts_unmatched_units() -> None:
     }
 
 
-def test_exact_true_uses_all_formula_covariates() -> None:
+def test_exact_true_raises_for_ambiguous_formula_covariates() -> None:
     data = pd.DataFrame(
         {
             "treat": [1, 0, 1, 0],
@@ -161,10 +161,8 @@ def test_exact_true_uses_all_formula_covariates() -> None:
         }
     )
 
-    result = pymatchit.matchit("treat ~ sex + region", data, method="exact", exact=True)
-
-    assert result.matched_data().shape[0] == 4
-    assert result.match_summary()["n_subclasses"] == 2
+    with pytest.raises(ValueError, match="exact=True is ambiguous"):
+        pymatchit.matchit("treat ~ sex + region", data, method="exact", exact=True)
 
 
 def test_nearest_matching_without_replacement_uses_each_control_once() -> None:
@@ -195,6 +193,7 @@ def test_nearest_matching_with_replacement_reuses_best_control() -> None:
     assert result.matches["treated_index"].tolist() == ["t1", "t2"]
     assert result.matches["control_index"].tolist() == ["c1", "c1"]
     assert result.weights_.to_dict() == {"t1": 1.0, "t2": 1.0, "c1": 2.0, "c2": 0.0}
+    assert pd.isna(result.subclass_.loc["c1"])
     assert pd.isna(result.subclass_.loc["c2"])
 
 
@@ -507,6 +506,19 @@ def test_full_matching_assigns_multiple_controls_to_one_treated() -> None:
     assert result.matches.loc[0, "total_distance"] == pytest.approx(4.0)
     assert result.weights.to_dict() == {"t1": 1.0, "c1": 0.5, "c2": 0.5}
     assert result.subclass.to_dict() == {"t1": 1, "c1": 1, "c2": 1}
+
+
+def test_full_matching_uses_assigned_by_anchor_cost_orientation() -> None:
+    pytest.importorskip("ortools")
+    from pymatchit.matching.full import full_match
+
+    treatment = pd.Series([1, 0, 0], index=["t1", "c1", "c2"])
+    distances = np.array([[1.0, 100.0]])
+
+    result = full_match(treatment, distances, caliper=2.0)
+
+    assert result.matches.loc[0, "n_control"] == 1
+    assert result.weights.to_dict() == {"t1": 1.0, "c1": 1.0, "c2": 0.0}
 
 
 def test_full_matching_caliper_drops_forbidden_units() -> None:

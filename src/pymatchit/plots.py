@@ -74,7 +74,9 @@ def density_plot(result: object, covariate: str) -> Figure:
 def jitter_plot(result: object) -> Axes:
     """Plot propensity scores by treatment and matched/discarded status."""
     treatment = _require_series(result, "treatment")
-    propensity = _propensity_scores(result)
+    propensity = getattr(result, "propensity_score", None)
+    if propensity is None:
+        raise NotImplementedError("propensity_score required for jitter_plot")
     weights = _weights_or_ones(result, treatment.index)
     matched = weights > 0
 
