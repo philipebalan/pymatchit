@@ -583,6 +583,22 @@ def test_love_plot_runs_with_agg_backend() -> None:
     plt.close(ax.figure)
 
 
+def test_love_plot_respects_var_order() -> None:
+    from matplotlib import pyplot as plt
+
+    result = pymatchit.matchit(
+        "treat ~ x + z",
+        make_plot_data(),
+        method="nearest",
+        distance="mahalanobis",
+    )
+
+    ax = pymatchit.love_plot(result, var_order=["z", "x"])
+
+    assert [label.get_text() for label in ax.get_yticklabels()] == ["z", "x"]
+    plt.close(ax.figure)
+
+
 def test_ecdf_qq_jitter_and_histogram_plots_run_with_agg_backend() -> None:
     from matplotlib import pyplot as plt
     from matplotlib.axes import Axes
@@ -607,6 +623,60 @@ def test_ecdf_qq_jitter_and_histogram_plots_run_with_agg_backend() -> None:
         plt.close(figure)
     assert isinstance(jitter_ax, Axes)
     plt.close(jitter_ax.figure)
+
+
+def test_jitter_plot_uses_propensity_score_x_axis() -> None:
+    from matplotlib import pyplot as plt
+
+    result = pymatchit.matchit(
+        "treat ~ x + z",
+        make_plot_data(),
+        method="nearest",
+        distance="logit",
+    )
+
+    ax = pymatchit.jitter_plot(result)
+    x_values = np.concatenate(
+        [collection.get_offsets()[:, 0] for collection in ax.collections]
+    )
+
+    assert x_values.min() >= 0
+    assert x_values.max() <= 1
+    assert ax.get_xlabel() == "Propensity score"
+    plt.close(ax.figure)
+
+
+def test_histogram_plot_requires_existing_propensity_score() -> None:
+    result = pymatchit.matchit(
+        "treat ~ x + z",
+        make_plot_data(),
+        method="nearest",
+        distance="mahalanobis",
+    )
+
+    with pytest.raises(NotImplementedError, match="propensity_score required"):
+        pymatchit.histogram_plot(result)
+
+
+def test_subclass_plots_add_boundary_lines() -> None:
+    from matplotlib import pyplot as plt
+    from types import SimpleNamespace
+
+    result = SimpleNamespace(
+        method="subclass",
+        treatment=pd.Series([1, 0, 1, 0], index=list("abcd")),
+        propensity_score=pd.Series([0.1, 0.2, 0.7, 0.8], index=list("abcd")),
+        weights_=pd.Series([1.0, 1.0, 1.0, 1.0], index=list("abcd")),
+        subclass_=pd.Series([1, 1, 2, 2], index=list("abcd"), dtype="Int64"),
+    )
+
+    jitter_ax = pymatchit.jitter_plot(result)
+    histogram_fig = pymatchit.histogram_plot(result)
+
+    assert len(jitter_ax.lines) >= 1
+    assert all(len(ax.lines) >= 1 for ax in histogram_fig.axes)
+    plt.close(jitter_ax.figure)
+    plt.close(histogram_fig)
 
 
 def test_density_plot_runs_for_continuous_and_categorical_covariates() -> None:

@@ -9,12 +9,16 @@ from matplotlib.axes import Axes
 from matplotlib.figure import Figure
 from scipy.stats import gaussian_kde
 
-from pymatchit.distances import estimate_propensity_score
 
-
-def love_plot(result: object, abs: bool = True, threshold: float = 0.1) -> Axes:
+def love_plot(
+    result: object,
+    abs: bool = True,
+    threshold: float = 0.1,
+    var_order: str | list[str] | None = None,
+) -> Axes:
     """Plot standardized mean differences before and after matching."""
     summary = result.balance_summary()
+    summary = _order_love_summary(summary, var_order)
     before = summary["smd_before"].copy()
     after = summary["smd_after"].copy()
     if abs:
@@ -74,9 +78,7 @@ def density_plot(result: object, covariate: str) -> Figure:
 def jitter_plot(result: object) -> Axes:
     """Plot propensity scores by treatment and matched/discarded status."""
     treatment = _require_series(result, "treatment")
-    propensity = getattr(result, "propensity_score", None)
-    if propensity is None:
-        raise NotImplementedError("propensity_score required for jitter_plot")
+    propensity = _required_propensity_scores(result, "jitter_plot")
     weights = _weights_or_ones(result, treatment.index)
     matched = weights > 0
 
@@ -86,26 +88,30 @@ def jitter_plot(result: object) -> Axes:
         group_index = treatment.index[mask]
         offsets = _deterministic_jitter(len(group_index))
         group_matched = matched.loc[group_index]
-        x = np.full(len(group_index), group, dtype=float) + offsets
+        y = np.full(len(group_index), group, dtype=float) + offsets
         matched_index = group_index[group_matched.to_numpy()]
         discarded_index = group_index[~group_matched.to_numpy()]
         ax.scatter(
-            x[group_matched.to_numpy()],
             propensity.loc[matched_index].to_numpy(),
+            y[group_matched.to_numpy()],
+            s=_point_sizes(weights.loc[matched_index]),
             label=f"{label} matched",
             alpha=0.8,
         )
         ax.scatter(
-            x[~group_matched.to_numpy()],
             propensity.loc[discarded_index].to_numpy(),
+            y[~group_matched.to_numpy()],
+            s=_point_sizes(weights.loc[discarded_index]),
             label=f"{label} discarded",
             marker="x",
-            alpha=0.8,
+            alpha=0.5,
         )
 
-    ax.set_xticks([0, 1])
-    ax.set_xticklabels(["Control", "Treated"])
-    ax.set_ylabel("Propensity score")
+    _add_subclass_boundaries(ax, result)
+    ax.set_yticks([0, 1])
+    ax.set_yticklabels(["Control", "Treated"])
+    ax.set_xlabel("Propensity score")
+    ax.set_ylabel("Treatment group")
     ax.legend()
     fig.tight_layout()
     return ax
@@ -114,7 +120,7 @@ def jitter_plot(result: object) -> Axes:
 def histogram_plot(result: object) -> Figure:
     """Plot propensity score histograms before and after matching."""
     treatment = _require_series(result, "treatment")
-    propensity = _propensity_scores(result)
+    propensity = _required_propensity_scores(result, "histogram_plot")
     weights = _weights_or_ones(result, treatment.index)
     data = pd.DataFrame(
         {
@@ -127,6 +133,8 @@ def histogram_plot(result: object) -> Figure:
     fig, axes = plt.subplots(1, 2, sharex=True, sharey=True)
     _draw_histogram_panel(axes[0], data, "Before matching", weights=None)
     _draw_histogram_panel(axes[1], data, "After matching", weights=data["weights"])
+    for ax in axes:
+        _add_subclass_boundaries(ax, result)
     fig.tight_layout()
     return fig
 
@@ -175,6 +183,10 @@ def _draw_qq_panel(
     control_weights = None if weights is None else weights.loc[control.index]
     treated_q = _weighted_quantile(treated["value"], probabilities, treated_weights)
     control_q = _weighted_quantile(control["value"], probabilities, control_weights)
+    if data["value"].nunique(dropna=True) < 5:
+        jitter = _deterministic_jitter(len(probabilities)) * 0.05
+        treated_q = treated_q + jitter
+        control_q = control_q - jitter
     ax.scatter(control_q, treated_q, s=12)
     finite = np.concatenate(
         [
@@ -311,13 +323,11 @@ def _plot_density_or_hist(
     ax.plot(grid, density, label=label)
 
 
-def _propensity_scores(result: object) -> pd.Series:
+def _required_propensity_scores(result: object, plot_name: str) -> pd.Series:
     propensity = getattr(result, "propensity_score", None)
-    if propensity is not None:
-        return propensity
-    treatment = _require_series(result, "treatment")
-    covariates = _require_frame(result, "covariates")
-    return estimate_propensity_score(treatment, covariates)
+    if propensity is None:
+        raise NotImplementedError(f"propensity_score required for {plot_name}")
+    return propensity
 
 
 def _weights_or_ones(result: object, index: pd.Index) -> pd.Series:
@@ -331,6 +341,64 @@ def _deterministic_jitter(size: int) -> np.ndarray:
     if size == 0:
         return np.array([])
     return np.linspace(-0.08, 0.08, size)
+
+
+def _point_sizes(weights: pd.Series) -> np.ndarray:
+    if weights.empty:
+        return np.array([])
+    values = weights.to_numpy(dtype=float)
+    positive = values[values > 0]
+    if positive.size == 0:
+        return np.full(len(values), 20.0)
+    scaled = values / positive.max()
+    return 20.0 + 50.0 * scaled
+
+
+def _add_subclass_boundaries(ax: Axes, result: object) -> None:
+    if getattr(result, "method", None) != "subclass":
+        return
+    propensity = getattr(result, "propensity_score", None)
+    subclass = getattr(result, "subclass_", None)
+    if propensity is None or subclass is None:
+        return
+    for boundary in _subclass_boundaries(propensity, subclass):
+        ax.axvline(boundary, color="black", linestyle=":", linewidth=1, alpha=0.6)
+
+
+def _subclass_boundaries(
+    propensity: pd.Series,
+    subclass: pd.Series,
+) -> list[float]:
+    valid = subclass.dropna()
+    if valid.empty:
+        return []
+    ranges = []
+    for label in sorted(valid.unique()):
+        scores = propensity.loc[valid.index[valid == label]]
+        ranges.append((float(scores.min()), float(scores.max())))
+    boundaries = []
+    for left, right in zip(ranges, ranges[1:], strict=False):
+        boundaries.append((left[1] + right[0]) / 2)
+    return boundaries
+
+
+def _order_love_summary(
+    summary: pd.DataFrame,
+    var_order: str | list[str] | None,
+) -> pd.DataFrame:
+    if var_order is None:
+        return summary
+    if isinstance(var_order, list):
+        return summary.reindex(var_order)
+    if var_order == "unadjusted":
+        return summary.reindex(summary["smd_before"].abs().sort_values().index)
+    if var_order == "adjusted":
+        return summary.reindex(summary["smd_after"].abs().sort_values().index)
+    if var_order == "alphabetical":
+        return summary.sort_index()
+    raise ValueError(
+        "var_order must be None, a list, unadjusted, adjusted, or alphabetical."
+    )
 
 
 def _is_continuous(values: pd.Series) -> bool:

@@ -45,7 +45,7 @@ Plot common design-stage diagnostics:
 ```python
 import matplotlib.pyplot as plt
 
-pymatchit.love_plot(fit, threshold=0.1)
+pymatchit.love_plot(fit, threshold=0.1, var_order="unadjusted")
 pymatchit.ecdf_plot(fit, "age")
 pymatchit.qq_plot(fit, "income")
 pymatchit.density_plot(fit, "educ")
@@ -57,7 +57,9 @@ plt.show()
 
 The plots are intentionally MatchIt-style rather than pixel-perfect MatchIt
 ports. They use matplotlib only and focus on quick diagnostics for balance,
-propensity score overlap, and matched/discarded units.
+propensity score overlap, and matched/discarded units. Propensity score plots
+use the propensity scores stored on the matching result; they do not refit a
+distance model while plotting.
 
 Other implemented methods:
 
